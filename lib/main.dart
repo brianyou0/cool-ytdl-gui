@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
 void main() => runApp(const YtDlpApp());
@@ -35,7 +37,42 @@ class CompleteForm extends StatefulWidget {
 class _CompleteFormState extends State<CompleteForm> {
   bool autoValidate = true;
   final _formKey = GlobalKey<FormBuilderState>();
-  bool _idHasError = false;
+
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  String? _directoryPath;
+
+  void _selectFolder() async {
+    _resetState();
+    try {
+      String? path = await FilePicker.platform.getDirectoryPath();
+      setState(() {
+        _directoryPath = path;
+      });
+    } on PlatformException catch (e) {
+      _logException('Unsupported operation ${e.toString()}');
+    } catch (e) {
+      _logException(e.toString());
+    }
+  }
+
+  void _logException(String message) {
+    debugPrint(message);
+    _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
+  void _resetState() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _directoryPath = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,13 +96,6 @@ class _CompleteFormState extends State<CompleteForm> {
                         labelText: 'Video ID',
                         hintText: 'youtube.com/watch?v=(this part)',
                       ),
-                      onChanged: (val) {
-                        setState(() {
-                          _idHasError = !(_formKey.currentState?.fields['vidID']
-                                  ?.validate() ??
-                              false);
-                        });
-                      },
                       validator: FormBuilderValidators.compose([
                         FormBuilderValidators.required(),
                       ]),
@@ -80,20 +110,40 @@ class _CompleteFormState extends State<CompleteForm> {
               ),
               Row(
                 children: <Widget>[
+                  ElevatedButton(
+                    onPressed: () => _selectFolder(),
+                    child: const Text('Select Directory'),
+                  ),
+                  const SizedBox(width: 10),
+                  Builder(
+                    builder: (BuildContext context) => _directoryPath != null
+                        ? Text(_directoryPath!)
+                        : const SizedBox(),
+                  )
+                ],
+              ),
+              const SizedBox(height: 15),
+              Row(
+                children: <Widget>[
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
                         if (_formKey.currentState?.saveAndValidate() ?? false) {
                           var options = [
-                            'https://www.youtube.com/watch?v=${_formKey.currentState?.value['vidID']}'
+                            'https://www.youtube.com/watch?v=${_formKey.currentState?.value['vidID']}',
                           ];
                           if (_formKey
                               .currentState?.value['audio_only_switch']) {
                             options.add('-x');
                           }
+                          if (_directoryPath != null) {
+                            options.add('-o');
+                            options.add('$_directoryPath/%(title)s.%(ext)s');
+                          }
 
                           Process.run('./lib/yt-dlp.exe', options)
                               .then((ProcessResult results) {
+                            debugPrint(results.stderr);
                             debugPrint(results.stdout);
                           });
                         } else {
@@ -101,10 +151,7 @@ class _CompleteFormState extends State<CompleteForm> {
                           debugPrint('validation failed');
                         }
                       },
-                      child: const Text(
-                        'Submit',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                      child: const Text('Submit'),
                     ),
                   ),
                   const SizedBox(width: 20),
