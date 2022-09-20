@@ -90,18 +90,28 @@ class _CompleteFormState extends State<CompleteForm> {
                 },
                 child: Column(
                   children: <Widget>[
+                    FormBuilderRadioGroup<String>(
+                      decoration:
+                          const InputDecoration(labelText: 'Download type'),
+                      initialValue: 'Video',
+                      name: 'download_type',
+                      options: ['Video', 'Playlist']
+                          .map((download_type) => FormBuilderFieldOption(
+                                value: download_type,
+                                child: Text(download_type),
+                              ))
+                          .toList(growable: false),
+                    ),
                     FormBuilderTextField(
                       name: 'vidID',
                       decoration: const InputDecoration(
-                        labelText: 'Video ID',
-                        hintText: 'youtube.com/watch?v=(this part)',
-                      ),
+                          labelText: 'Video or Playlist ID'),
                       validator: FormBuilderValidators.compose([
                         FormBuilderValidators.required(),
                       ]),
                     ),
                     FormBuilderCheckbox(
-                      name: 'audio_only_switch',
+                      name: 'audio_only_checkbox',
                       initialValue: false,
                       title: const Text('Keep audio only'),
                     ),
@@ -129,16 +139,31 @@ class _CompleteFormState extends State<CompleteForm> {
                     child: ElevatedButton(
                       onPressed: () {
                         if (_formKey.currentState?.saveAndValidate() ?? false) {
-                          var options = [
-                            'https://www.youtube.com/watch?v=${_formKey.currentState?.value['vidID']}',
-                          ];
+                          var options = <String>[];
+
+                          if (_formKey.currentState?.value['download_type'] ==
+                              'Video') {
+                            options.add(
+                                'https://www.youtube.com/watch?v=${_formKey.currentState?.value['vidID']}');
+                          } else {
+                            options.add(
+                                'https://www.youtube.com/playlist?list=${_formKey.currentState?.value['vidID']}');
+                          }
+
                           if (_formKey
-                              .currentState?.value['audio_only_switch']) {
+                              .currentState?.value['audio_only_checkbox']) {
                             options.add('-x');
                           }
+
                           if (_directoryPath != null) {
                             options.add('-o');
-                            options.add('$_directoryPath/%(title)s.%(ext)s');
+                            if (_formKey.currentState?.value['download_type'] ==
+                                'Video') {
+                              options.add('$_directoryPath/%(title)s.%(ext)s');
+                            } else {
+                              options.add(
+                                  '$_directoryPath/%(playlist_index)s - %(title)s.%(ext)s');
+                            }
                           }
 
                           Process.run('./lib/yt-dlp.exe', options)
@@ -159,6 +184,7 @@ class _CompleteFormState extends State<CompleteForm> {
                     child: OutlinedButton(
                       onPressed: () {
                         _formKey.currentState?.reset();
+                        _resetState();
                       },
                       child: Text(
                         'Reset',
