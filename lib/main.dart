@@ -1,202 +1,139 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_form_builder/flutter_form_builder.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:form_builder_validators/form_builder_validators.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 
-void main() => runApp(const YtDlpApp());
+void main() => runApp(const YtDlr());
 
-class YtDlpApp extends StatelessWidget {
-  const YtDlpApp({Key? key}) : super(key: key);
+class YtDlr extends StatelessWidget {
+  const YtDlr({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'YouTube Downloader',
-      localizationsDelegates: [
-        FormBuilderLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ],
-      home: CompleteForm(),
-    );
-  }
-}
+    const appTitle = 'YouTube Downloader';
 
-class CompleteForm extends StatefulWidget {
-  const CompleteForm({Key? key}) : super(key: key);
-
-  @override
-  State<CompleteForm> createState() {
-    return _CompleteFormState();
-  }
-}
-
-class _CompleteFormState extends State<CompleteForm> {
-  bool autoValidate = true;
-  final _formKey = GlobalKey<FormBuilderState>();
-
-  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  String? _directoryPath;
-
-  void _selectFolder() async {
-    _resetState();
-    try {
-      String? path = await FilePicker.platform.getDirectoryPath();
-      setState(() {
-        _directoryPath = path;
-      });
-    } on PlatformException catch (e) {
-      _logException('Unsupported operation ${e.toString()}');
-    } catch (e) {
-      _logException(e.toString());
-    }
-  }
-
-  void _logException(String message) {
-    debugPrint(message);
-    _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
-    _scaffoldMessengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(message),
+    return MaterialApp(
+      title: appTitle,
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text(appTitle),
+        ),
+        body: const MyCustomForm(),
       ),
     );
   }
+}
 
-  void _resetState() {
-    if (!mounted) {
-      return;
-    }
+class MyCustomForm extends StatefulWidget {
+  const MyCustomForm({super.key});
+
+  @override
+  // ignore: library_private_types_in_public_api
+  _MyCustomFormState createState() {
+    return _MyCustomFormState();
+  }
+}
+
+class _MyCustomFormState extends State<MyCustomForm> {
+  final _formKey = GlobalKey<FormState>();
+  final urlController = TextEditingController();
+
+  String? _directoryPath = '';
+  bool isAudio = false;
+
+  void _selectFolder() async {
+    String? path = await FilePicker.platform.getDirectoryPath();
     setState(() {
-      _directoryPath = null;
+      _directoryPath = path ?? _directoryPath;
     });
   }
 
   @override
+  void dispose() {
+    urlController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('YouTube Downloader')),
-      body: Padding(
-        padding: const EdgeInsets.all(10),
-        child: SingleChildScrollView(
-          child: Column(
-            children: <Widget>[
-              FormBuilder(
-                key: _formKey,
-                onChanged: () {
-                  _formKey.currentState!.save();
+    return Padding(
+      padding: const EdgeInsets.all(15),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            SizedBox(
+              height: 75,
+              child: TextFormField(
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                controller: urlController,
+                decoration: const InputDecoration(
+                    hintText: 'Enter video or playlist ID or URL'),
+                validator: (value) {
+                  return (value == null || value.isEmpty)
+                      ? 'ID or URL is required'
+                      : null;
                 },
-                child: Column(
-                  children: <Widget>[
-                    FormBuilderRadioGroup<String>(
-                      decoration:
-                          const InputDecoration(labelText: 'Download type'),
-                      initialValue: 'Video',
-                      name: 'download_type',
-                      options: ['Video', 'Playlist']
-                          .map((download_type) => FormBuilderFieldOption(
-                                value: download_type,
-                                child: Text(download_type),
-                              ))
-                          .toList(growable: false),
-                    ),
-                    FormBuilderTextField(
-                      name: 'vidID',
-                      decoration: const InputDecoration(
-                          labelText: 'Video or Playlist ID'),
-                      validator: FormBuilderValidators.compose([
-                        FormBuilderValidators.required(),
-                      ]),
-                    ),
-                    FormBuilderCheckbox(
-                      name: 'audio_only_checkbox',
-                      initialValue: false,
-                      title: const Text('Keep audio only'),
-                    ),
-                  ],
-                ),
               ),
-              Row(
-                children: <Widget>[
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              child: Row(
+                children: [
                   ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey),
                     onPressed: () => _selectFolder(),
-                    child: const Text('Select Directory'),
+                    child: const Text('Select destination folder'),
                   ),
-                  const SizedBox(width: 10),
-                  Builder(
-                    builder: (BuildContext context) => _directoryPath != null
-                        ? Text(_directoryPath!)
-                        : const SizedBox(),
-                  )
+                  const SizedBox(
+                    width: 15,
+                  ),
+                  Text(_directoryPath != null ? _directoryPath! : ''),
+                  const Spacer(),
+                  IconButton(
+                      onPressed: () => {
+                            setState(() {
+                              _directoryPath = null;
+                            })
+                          },
+                      icon: const Icon(Icons.cancel)),
                 ],
               ),
-              const SizedBox(height: 15),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState?.saveAndValidate() ?? false) {
-                          var options = <String>[];
-
-                          if (_formKey.currentState?.value['download_type'] ==
-                              'Video') {
-                            options.add(
-                                'https://www.youtube.com/watch?v=${_formKey.currentState?.value['vidID']}');
-                          } else {
-                            options.add(
-                                'https://www.youtube.com/playlist?list=${_formKey.currentState?.value['vidID']}');
-                          }
-
-                          if (_formKey
-                              .currentState?.value['audio_only_checkbox']) {
-                            options.add('-x');
-                          }
-
-                          if (_directoryPath != null) {
-                            options.add('-o');
-                            if (_formKey.currentState?.value['download_type'] ==
-                                'Video') {
-                              options.add('$_directoryPath/%(title)s.%(ext)s');
-                            } else {
-                              options.add(
-                                  '$_directoryPath/%(playlist_index)s - %(title)s.%(ext)s');
-                            }
-                          }
-
-                          Process.run('./lib/yt-dlp.exe', options)
-                              .then((ProcessResult results) {
-                            debugPrint(results.stderr);
-                            debugPrint(results.stdout);
-                          });
-                        } else {
-                          debugPrint(_formKey.currentState?.value.toString());
-                          debugPrint('validation failed');
-                        }
-                      },
-                      child: const Text('Submit'),
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        _formKey.currentState?.reset();
-                        _resetState();
-                      },
-                      child: Text(
-                        'Reset',
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.secondary),
-                      ),
-                    ),
-                  ),
-                ],
+            ),
+            CheckboxListTile(
+              title: const Text("Keep only audio"),
+              value: isAudio,
+              onChanged: (newValue) {
+                setState(() {
+                  isAudio = !isAudio;
+                });
+              },
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(36),
               ),
-            ],
-          ),
+              onPressed: () {
+                if (_formKey.currentState!.validate()) {
+                  var options = [urlController.text];
+                  if (isAudio) {
+                    options.add('-x');
+                  }
+                  if (_directoryPath != null) {
+                    options.add('-o');
+                    options.add('$_directoryPath\\%(title)s.%(ext)s');
+                  }
+
+                  Process.run('./lib/yt-dlp.exe', options)
+                      .then((ProcessResult results) {
+                    debugPrint(results.stderr);
+                    debugPrint(results.stdout);
+                  });
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
         ),
       ),
     );
