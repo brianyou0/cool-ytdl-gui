@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
 
 void main() => runApp(const YtDlr());
 
@@ -75,30 +76,27 @@ class _MyCustomFormState extends State<MyCustomForm> {
                 },
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              child: Row(
-                children: [
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey),
-                    onPressed: () => _selectFolder(),
-                    child: const Text('Select destination folder'),
-                  ),
-                  const SizedBox(
-                    width: 15,
-                  ),
-                  Text(_directoryPath != null ? _directoryPath! : ''),
-                  const Spacer(),
-                  IconButton(
-                      onPressed: () => {
-                            setState(() {
-                              _directoryPath = null;
-                            })
-                          },
-                      icon: const Icon(Icons.cancel)),
-                ],
-              ),
+            Row(
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey),
+                  onPressed: () => _selectFolder(),
+                  child: const Text('Select destination folder'),
+                ),
+                const SizedBox(
+                  width: 15,
+                ),
+                Text(_directoryPath != null ? _directoryPath! : ''),
+                const Spacer(),
+                IconButton(
+                    onPressed: () => {
+                          setState(() {
+                            _directoryPath = null;
+                          })
+                        },
+                    icon: const Icon(Icons.cancel)),
+              ],
             ),
             CheckboxListTile(
               title: const Text("Keep only audio"),
@@ -113,23 +111,47 @@ class _MyCustomFormState extends State<MyCustomForm> {
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(36),
               ),
-              onPressed: () {
-                if (_formKey.currentState!.validate()) {
-                  var options = [urlController.text];
-                  if (isAudio) {
-                    options.add('-x');
-                  }
-                  if (_directoryPath != null) {
-                    options.add('-o');
-                    options.add('$_directoryPath\\%(title)s.%(ext)s');
-                  }
-
-                  Process.run('./lib/yt-dlp.exe', options)
-                      .then((ProcessResult results) {
-                    debugPrint(results.stderr);
-                    debugPrint(results.stdout);
-                  });
+              onPressed: () async {
+                if (!_formKey.currentState!.validate()) {
+                  return;
                 }
+
+                var options = [urlController.text];
+                if (isAudio) {
+                  options.add('-x');
+                }
+                if (_directoryPath != null) {
+                  options.add('-o');
+                  options.add('$_directoryPath\\%(title)s.%(ext)s');
+                }
+
+                if (!File('./yt-dlp.exe').existsSync()) {
+                  debugPrint('yt-dlp missing, downloading...');
+                  try {
+                    Response response = await Dio().get(
+                      'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',
+                      onReceiveProgress: (count, total) {
+                        if (total != -1) {
+                          debugPrint('${count / total * 100}%');
+                        }
+                      },
+                      options: Options(
+                        responseType: ResponseType.bytes,
+                        validateStatus: (status) => status! < 500,
+                      ),
+                    );
+                    File file = File('yt-dlp.exe');
+                    var raf = file.openSync(mode: FileMode.write);
+                    raf.writeFromSync(response.data);
+                    await raf.close();
+                  } catch (e) {
+                    debugPrint(e.toString());
+                  }
+                }
+
+                final results = await Process.run('./yt-dlp.exe', options);
+                debugPrint(results.stderr);
+                debugPrint(results.stdout);
               },
               child: const Text('Submit'),
             ),
