@@ -44,6 +44,7 @@ dependencies:
   file: ^6.1.4
   process: ^4.2.4
   dio: ^4.0.6
+  percent_indicator: ^4.2.2
 
 dev_dependencies:
   flutter_test:

@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
+import 'package:percent_indicator/percent_indicator.dart';
 
 void main() => runApp(const YtDlr());
 
@@ -29,9 +31,7 @@ class MyCustomForm extends StatefulWidget {
 
   @override
   // ignore: library_private_types_in_public_api
-  _MyCustomFormState createState() {
-    return _MyCustomFormState();
-  }
+  _MyCustomFormState createState() => _MyCustomFormState();
 }
 
 class _MyCustomFormState extends State<MyCustomForm> {
@@ -39,6 +39,8 @@ class _MyCustomFormState extends State<MyCustomForm> {
   final urlController = TextEditingController();
 
   String? _directoryPath = '';
+  var dlMessage = '';
+  double dlPercent = 0.0;
   bool isAudio = false;
 
   void _selectFolder() async {
@@ -149,12 +151,44 @@ class _MyCustomFormState extends State<MyCustomForm> {
                   }
                 }
 
-                final results = await Process.run('./yt-dlp.exe', options);
-                debugPrint(results.stderr);
-                debugPrint(results.stdout);
+                var process = await Process.start('./yt-dlp.exe', options);
+                process.stdout.transform(utf8.decoder).forEach((out) {
+                  final percentInd = out.indexOf('% of');
+                  if (percentInd != -1) {
+                    setState(() {
+                      dlPercent = double.parse(
+                              out.substring(percentInd - 4, percentInd)) /
+                          100.0;
+                      debugPrint(dlPercent.toString());
+                      dlMessage = dlPercent >= 1
+                          ? 'Download complete!'
+                          : 'Downloading video...';
+                    });
+                  }
+                });
+                process.stderr.transform(utf8.decoder).forEach((err) {
+                  if (err.contains('not a valid URL')) {
+                    setState(() {
+                      dlMessage = 'Error: Not a valid URL.';
+                    });
+                  }
+                });
               },
               child: const Text('Submit'),
             ),
+            const SizedBox(height: 15.0),
+            LinearPercentIndicator(
+              animation: true,
+              animationDuration: 100,
+              animateFromLastPercent: true,
+              lineHeight: 20.0,
+              percent: dlPercent,
+              center: Text((dlPercent * 100).toStringAsFixed(2)),
+              barRadius: const Radius.circular(15),
+              progressColor: Colors.green,
+            ),
+            const SizedBox(height: 15.0),
+            Text(dlMessage),
           ],
         ),
       ),
