@@ -22,9 +22,9 @@ class _HomepageState extends State<Homepage> {
   String? _directoryPath = '';
   String linkEntryMessage = '';
   String dlMessage = '';
-  double dlPercent = 0.0;
   bool isAudio = false;
-  var videoQueue = [];
+  List<String> videoQueue = <String>[];
+  List<double> dlPercents = <double>[];
 
   void _selectFolder() async {
     String? path = await FilePicker.platform.getDirectoryPath();
@@ -37,6 +37,72 @@ class _HomepageState extends State<Homepage> {
   void dispose() {
     urlController.dispose();
     super.dispose();
+  }
+
+  void downloadVids() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    var options = <String>[];
+    if (isAudio) {
+      options.add('-x');
+    }
+    if (_directoryPath != null) {
+      options.add('-o');
+      options.add('$_directoryPath\\%(title)s.%(ext)s');
+    }
+
+    if (!File('./yt-dlp.exe').existsSync()) {
+      debugPrint('yt-dlp missing, downloading...');
+      try {
+        Response response = await Dio().get(
+          'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',
+          onReceiveProgress: (count, total) {
+            if (total != -1) {
+              debugPrint('${count / total * 100}%');
+            }
+          },
+          options: Options(
+            responseType: ResponseType.bytes,
+            validateStatus: (status) => status! < 500,
+          ),
+        );
+        File file = File('yt-dlp.exe');
+        var raf = file.openSync(mode: FileMode.write);
+        raf.writeFromSync(response.data);
+        await raf.close();
+      } catch (e) {
+        debugPrint(e.toString());
+      }
+    }
+
+    var processes = <Process>[];
+    var processPercents = <double>[];
+    for (var index = 0; index < videoQueue.length; index++) {
+      var process =
+          await Process.start('./yt-dlp.exe', options + [videoQueue[index]]);
+      process.stdout.transform(utf8.decoder).forEach((out) {
+        final percentInd = out.indexOf('% of');
+        if (percentInd != -1) {
+          setState(() {
+            dlPercents[index] =
+                double.parse(out.substring(percentInd - 4, percentInd)) / 100.0;
+            debugPrint(index.toString() + dlPercents[index].toString());
+            dlMessage = dlPercents[index] >= 1
+                ? 'Download complete!'
+                : 'Downloading video...';
+          });
+        }
+      });
+      process.stderr.transform(utf8.decoder).forEach((err) {
+        if (err.contains('not a valid URL')) {
+          setState(() {
+            dlMessage = 'Error: Not a valid URL.';
+          });
+        }
+      });
+    }
   }
 
   @override
@@ -60,6 +126,7 @@ class _HomepageState extends State<Homepage> {
                       linkEntryMessage = 'Link already in queue.';
                     } else {
                       videoQueue.add(urlController.text);
+                      dlPercents.add(0.0);
                       linkEntryMessage = '';
                     }
                     urlController.clear();
@@ -82,18 +149,37 @@ class _HomepageState extends State<Homepage> {
               child: videoQueue.isNotEmpty
                   ? ListView.builder(
                       itemCount: videoQueue.length,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
                       itemBuilder: (context, index) {
-                        return Row(
-                          children: [
-                            Text(videoQueue[index].toString()),
-                            const Spacer(),
-                            IconButton(
-                                onPressed: () => setState(() {
-                                      videoQueue.removeAt(index);
-                                    }),
-                                icon: const Icon(Icons.close))
-                          ],
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: const BoxDecoration(
+                            color: Colors.black12,
+                          ),
+                          child: Row(
+                            children: [
+                              Text(videoQueue[index].toString()),
+                              const Spacer(),
+                              SizedBox(
+                                width: 300,
+                                child: LinearPercentIndicator(
+                                  animation: true,
+                                  animationDuration: 100,
+                                  animateFromLastPercent: true,
+                                  lineHeight: 20.0,
+                                  percent: dlPercents[index],
+                                  center: Text((dlPercents[index] * 100)
+                                      .toStringAsFixed(2)),
+                                  barRadius: const Radius.circular(15),
+                                  progressColor: Colors.green,
+                                ),
+                              ),
+                              IconButton(
+                                  onPressed: () => setState(() {
+                                        videoQueue.removeAt(index);
+                                      }),
+                                  icon: const Icon(Icons.close)),
+                            ],
+                          ),
                         );
                       },
                     )
@@ -130,83 +216,26 @@ class _HomepageState extends State<Homepage> {
                 });
               },
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(36),
-              ),
-              onPressed: () async {
-                if (!_formKey.currentState!.validate()) {
-                  return;
-                }
-
-                var options = [urlController.text];
-                if (isAudio) {
-                  options.add('-x');
-                }
-                if (_directoryPath != null) {
-                  options.add('-o');
-                  options.add('$_directoryPath\\%(title)s.%(ext)s');
-                }
-
-                if (!File('./yt-dlp.exe').existsSync()) {
-                  debugPrint('yt-dlp missing, downloading...');
-                  try {
-                    Response response = await Dio().get(
-                      'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',
-                      onReceiveProgress: (count, total) {
-                        if (total != -1) {
-                          debugPrint('${count / total * 100}%');
-                        }
-                      },
-                      options: Options(
-                        responseType: ResponseType.bytes,
-                        validateStatus: (status) => status! < 500,
-                      ),
-                    );
-                    File file = File('yt-dlp.exe');
-                    var raf = file.openSync(mode: FileMode.write);
-                    raf.writeFromSync(response.data);
-                    await raf.close();
-                  } catch (e) {
-                    debugPrint(e.toString());
-                  }
-                }
-
-                var process = await Process.start('./yt-dlp.exe', options);
-                process.stdout.transform(utf8.decoder).forEach((out) {
-                  final percentInd = out.indexOf('% of');
-                  if (percentInd != -1) {
-                    setState(() {
-                      dlPercent = double.parse(
-                              out.substring(percentInd - 4, percentInd)) /
-                          100.0;
-                      debugPrint(dlPercent.toString());
-                      dlMessage = dlPercent >= 1
-                          ? 'Download complete!'
-                          : 'Downloading video...';
-                    });
-                  }
-                });
-                process.stderr.transform(utf8.decoder).forEach((err) {
-                  if (err.contains('not a valid URL')) {
-                    setState(() {
-                      dlMessage = 'Error: Not a valid URL.';
-                    });
-                  }
-                });
-              },
-              child: const Text('Submit'),
-            ),
-            const SizedBox(height: 15.0),
-            LinearPercentIndicator(
-              animation: true,
-              animationDuration: 100,
-              animateFromLastPercent: true,
-              lineHeight: 20.0,
-              percent: dlPercent,
-              center: Text((dlPercent * 100).toStringAsFixed(2)),
-              barRadius: const Radius.circular(15),
-              progressColor: Colors.green,
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: downloadVids,
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    child: const Text('Download'),
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => setState(() => videoQueue.clear()),
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    child: const Text('Clear'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 15.0),
             Text(dlMessage),
