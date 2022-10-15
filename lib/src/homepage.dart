@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 
-import 'vidTile.dart';
-
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
 
@@ -23,7 +21,8 @@ class _HomepageState extends State<Homepage> {
   String linkEntryMessage = '';
   String dlMessage = '';
   bool isAudio = false;
-  List<String> videoQueue = <String>[];
+  bool linkError = false;
+  List<Map> videoQueue = <Map>[];
   List<double> dlPercents = <double>[];
 
   void _selectFolder() async {
@@ -39,11 +38,47 @@ class _HomepageState extends State<Homepage> {
     super.dispose();
   }
 
-  void downloadVids() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+  void addLink() async {
+    if (urlController.text == '') {
+      setState(() {
+        linkEntryMessage = 'Please enter a video or playlist URL.';
+        linkError = true;
+      });
+    } else if (videoQueue
+        .map((v) => v["webpage_url"])
+        .contains(urlController.text)) {
+      setState(() {
+        linkEntryMessage = 'Link already in queue.';
+        linkError = true;
+      });
+    } else {
+      setState(() {
+        linkEntryMessage = 'Retrieving URL...';
+        linkError = false;
+      });
 
+      var process = await Process.run(
+          './yt-dlp.exe', ['-j', '--skip-download', urlController.text]);
+
+      if (process.stderr.toString().contains('not a valid URL')) {
+        setState(() {
+          linkEntryMessage = 'Invalid URL.';
+          linkError = true;
+        });
+        return;
+      }
+
+      setState(() {
+        videoQueue.add(jsonDecode(process.stdout.toString()));
+        dlPercents.add(0.0);
+        urlController.clear();
+        linkEntryMessage = 'URL added.';
+        linkError = false;
+      });
+    }
+  }
+
+  void downloadVids() async {
     var options = <String>[];
     if (isAudio) {
       options.add('-x');
@@ -77,28 +112,26 @@ class _HomepageState extends State<Homepage> {
       }
     }
 
-    var processes = <Process>[];
-    var processPercents = <double>[];
+    var completeVids = 0;
+    setState(() =>
+        dlMessage = 'Downloading video${videoQueue.length > 1 ? 's' : ''}...');
+
     for (var index = 0; index < videoQueue.length; index++) {
-      var process =
-          await Process.start('./yt-dlp.exe', options + [videoQueue[index]]);
+      var process = await Process.start(
+          './yt-dlp.exe', options + [videoQueue[index]["webpage_url"]]);
       process.stdout.transform(utf8.decoder).forEach((out) {
         final percentInd = out.indexOf('% of');
         if (percentInd != -1) {
           setState(() {
             dlPercents[index] =
                 double.parse(out.substring(percentInd - 4, percentInd)) / 100.0;
-            debugPrint(index.toString() + dlPercents[index].toString());
-            dlMessage = dlPercents[index] >= 1
-                ? 'Download complete!'
-                : 'Downloading video...';
-          });
-        }
-      });
-      process.stderr.transform(utf8.decoder).forEach((err) {
-        if (err.contains('not a valid URL')) {
-          setState(() {
-            dlMessage = 'Error: Not a valid URL.';
+            debugPrint('${index.toString()} ${dlPercents[index].toString()}');
+            if (dlPercents[index] >= 1) {
+              completeVids++;
+              if (completeVids == videoQueue.length) {
+                dlMessage = 'Download complete!';
+              }
+            }
           });
         }
       });
@@ -118,23 +151,12 @@ class _HomepageState extends State<Homepage> {
               decoration: InputDecoration(
                 hintText: 'Enter video or playlist URL',
                 suffixIcon: IconButton(
-                  onPressed: () => setState(() {
-                    if (urlController.text == '') {
-                      linkEntryMessage =
-                          'Please enter a video or playlist URL.';
-                    } else if (videoQueue.contains(urlController.text)) {
-                      linkEntryMessage = 'Link already in queue.';
-                    } else {
-                      videoQueue.add(urlController.text);
-                      dlPercents.add(0.0);
-                      linkEntryMessage = '';
-                    }
-                    urlController.clear();
-                    debugPrint(videoQueue.toString());
-                  }),
+                  onPressed: () => addLink(),
                   icon: const Icon(Icons.add),
                 ),
               ),
+              onFieldSubmitted: (value) => addLink(),
+              textInputAction: TextInputAction.done,
             ),
             const SizedBox(height: 5),
             Align(
@@ -142,7 +164,7 @@ class _HomepageState extends State<Homepage> {
               child: Text(
                 linkEntryMessage,
                 textAlign: TextAlign.left,
-                style: const TextStyle(color: Colors.red),
+                style: TextStyle(color: linkError ? Colors.red : Colors.black),
               ),
             ),
             Expanded(
@@ -151,13 +173,35 @@ class _HomepageState extends State<Homepage> {
                       itemCount: videoQueue.length,
                       itemBuilder: (context, index) {
                         return Container(
+                          height: 100,
                           margin: const EdgeInsets.symmetric(vertical: 10),
                           decoration: const BoxDecoration(
                             color: Colors.black12,
                           ),
                           child: Row(
                             children: [
-                              Text(videoQueue[index].toString()),
+                              Image.network(videoQueue[index]["thumbnail"]),
+                              const SizedBox(width: 20),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    videoQueue[index]["title"],
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text('by ${videoQueue[index]['uploader']}'),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Duration: ${Duration(seconds: videoQueue[index]["duration"]).toString().split('.')[0]}',
+                                  ),
+                                  const SizedBox(height: 5),
+                                ],
+                              ),
                               const Spacer(),
                               SizedBox(
                                 width: 300,
