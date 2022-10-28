@@ -173,55 +173,67 @@ class _HomepageState extends State<Homepage> {
                       itemCount: videoQueue.length,
                       itemBuilder: (context, index) {
                         return Container(
-                          height: 100,
+                          height: 90,
                           margin: const EdgeInsets.symmetric(vertical: 10),
                           decoration: const BoxDecoration(
                             color: Colors.black12,
                           ),
                           child: Row(
                             children: [
-                              Image.network(videoQueue[index]["thumbnail"]),
-                              const SizedBox(width: 20),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    videoQueue[index]["title"],
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text('by ${videoQueue[index]['uploader']}'),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    'Duration: ${Duration(seconds: videoQueue[index]["duration"]).toString().split('.')[0]}',
-                                  ),
-                                  const SizedBox(height: 5),
-                                ],
+                              Image.network(
+                                videoQueue[index]["thumbnail"],
+                                width: 160,
                               ),
-                              const Spacer(),
-                              SizedBox(
-                                width: 300,
-                                child: LinearPercentIndicator(
-                                  animation: true,
-                                  animationDuration: 100,
-                                  animateFromLastPercent: true,
-                                  lineHeight: 20.0,
-                                  percent: dlPercents[index],
-                                  center: Text((dlPercents[index] * 100)
-                                      .toStringAsFixed(2)),
-                                  barRadius: const Radius.circular(15),
-                                  progressColor: Colors.green,
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      videoQueue[index]["title"],
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      'by ${videoQueue[index]['uploader']}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      'Duration: ${Duration(seconds: videoQueue[index]["duration"]).toString().split('.')[0]}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 5),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: SizedBox(
+                                  width: 300,
+                                  child: LinearPercentIndicator(
+                                    animation: true,
+                                    animationDuration: 100,
+                                    animateFromLastPercent: true,
+                                    lineHeight: 20.0,
+                                    percent: dlPercents[index],
+                                    center: Text((dlPercents[index] * 100)
+                                        .toStringAsFixed(2)),
+                                    barRadius: const Radius.circular(15),
+                                    progressColor: Colors.green,
+                                  ),
                                 ),
                               ),
                               IconButton(
-                                  onPressed: () => setState(() {
-                                        videoQueue.removeAt(index);
-                                      }),
-                                  icon: const Icon(Icons.close)),
+                                onPressed: () => setState(() {
+                                  videoQueue.removeAt(index);
+                                }),
+                                icon: const Icon(Icons.close),
+                              ),
                             ],
                           ),
                         );
